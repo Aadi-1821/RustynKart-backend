@@ -34,6 +34,8 @@ app.use(
       "http://localhost:5173",
       "http://localhost:5174",
       "http://localhost:3000",
+      "https://rusty-kart.onrender.com",
+      "https://rustynkart.onrender.com",
     ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -60,6 +62,8 @@ app.use((req, res, next) => {
     "http://localhost:5173",
     "http://localhost:5174",
     "http://localhost:3000",
+    "https://rusty-kart.onrender.com",
+    "https://rustynkart.onrender.com",
   ];
   const origin = req.headers.origin;
 
@@ -100,8 +104,8 @@ app.get("/test-cookie", (req, res) => {
   const testToken = "test-token-value";
   res.cookie("test-token", testToken, {
     httpOnly: true,
-    secure: false,
-    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     maxAge: 24 * 60 * 60 * 1000, // 1 day
     path: "/",
   });
