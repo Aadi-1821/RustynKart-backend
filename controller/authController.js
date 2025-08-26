@@ -32,17 +32,20 @@ export const registration = async (req, res) => {
     console.log("Registration: Generated token for user ID:", user._id);
     console.log("Registration: Token value:", token);
 
-    // Set cookie with proper options for local development
+    // Set cookie with proper options for both local and production environments
     res.cookie("token", token, {
-      httpOnly: true,
-      secure: false,
-      sameSite: "lax",
+      httpOnly: false, // Allow JavaScript access so frontend can read token
+      secure: true, // Always use secure for cross-origin
+      sameSite: "none", // Required for cross-origin
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: "/",
     });
 
+    // Also include token in response body for clients that can't use cookies
+    const userResponse = { ...user.toObject(), token };
+
     console.log("Registration: Cookie set successfully");
-    return res.status(201).json(user);
+    return res.status(201).json(userResponse);
   } catch (error) {
     console.error("Registration error:", error);
     return res
@@ -75,17 +78,20 @@ export const login = async (req, res) => {
     console.log("Login: Generated token for user ID:", user._id);
     console.log("Login: Token value:", token);
 
-    // Set cookie with proper options for local development
+    // Set cookie with proper options for both local and production environments
     res.cookie("token", token, {
-      httpOnly: true,
-      secure: false,
-      sameSite: "lax",
+      httpOnly: false, // Allow JavaScript access so frontend can read token
+      secure: true, // Always use secure for cross-origin
+      sameSite: "none", // Required for cross-origin
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: "/",
     });
 
+    // Also include token in response body for clients that can't use cookies
+    const userResponse = { ...user.toObject(), token };
+
     console.log("Login: Cookie set successfully");
-    return res.status(200).json(user);
+    return res.status(200).json(userResponse);
   } catch (error) {
     console.error("Login error:", error);
     return res.status(500).json({ message: `Login error: ${error.message}` });
@@ -95,11 +101,11 @@ export const logOut = async (req, res) => {
   try {
     console.log("Logout attempt");
 
-    // Clear cookie with same options for local development
+    // Clear cookie with same options as when it was set
     res.clearCookie("token", {
       httpOnly: true,
-      secure: false,
-      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       path: "/",
     });
 
@@ -134,17 +140,20 @@ export const googleLogin = async (req, res) => {
     console.log("Google Login: Generated token for user ID:", user._id);
     console.log("Google Login: Token value:", token);
 
-    // Set cookie with proper options for local development
+    // Set cookie with proper options for both local and production environments
     res.cookie("token", token, {
-      httpOnly: true,
-      secure: false,
-      sameSite: "lax",
+      httpOnly: false, // Allow JavaScript access so frontend can read token
+      secure: true, // Always use secure for cross-origin
+      sameSite: "none", // Required for cross-origin
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: "/",
     });
 
+    // Also include token in response body for clients that can't use cookies
+    const userResponse = { ...user.toObject(), token };
+
     console.log("Google Login: Cookie set successfully");
-    return res.status(200).json(user);
+    return res.status(200).json(userResponse);
   } catch (error) {
     console.error("Google Login error:", error);
     return res
@@ -163,12 +172,13 @@ export const adminLogin = async (req, res) => {
     ) {
       let token = await genToken1(email);
       res.cookie("token", token, {
-        httpOnly: true,
-        secure: false,
-        sameSite: "Strict",
+        httpOnly: false, // Allow JavaScript access so frontend can read token
+        secure: true, // Always use secure for cross-origin
+        sameSite: "none", // Required for cross-origin
         maxAge: 1 * 24 * 60 * 60 * 1000,
+        path: "/",
       });
-      return res.status(200).json(token);
+      return res.status(200).json({ token, role: "admin" });
     }
     return res.status(400).json({ message: "Invaild creadintials" });
   } catch (error) {

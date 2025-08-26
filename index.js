@@ -24,19 +24,39 @@ app.use((req, res, next) => {
   console.log("Cookies received:", req.cookies);
   console.log("Authorization header:", req.headers.authorization);
   console.log("Origin:", req.headers.origin);
+
+  // Try to detect if the request is from the Vercel frontend
+  const isFromVercel =
+    req.headers.origin?.includes("vercel.app") ||
+    req.headers.referer?.includes("vercel.app");
+
+  if (isFromVercel) {
+    console.log("Request detected from Vercel frontend");
+  }
+
   next();
 });
 
 // CORS Configuration
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://localhost:5174",
-      "http://localhost:3000",
-      "https://rusty-kart.onrender.com",
-      "https://rustynkart.onrender.com",
-    ],
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps, curl requests)
+      const allowedOrigins = [
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:3000",
+        "https://rustynkart.vercel.app",
+        "https://rustynkart-admin.vercel.app",
+      ];
+
+      if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        console.log("Blocked origin:", origin);
+        callback(null, false);
+      }
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: [
@@ -45,8 +65,17 @@ app.use(
       "Accept",
       "X-Requested-With",
       "Origin",
+      "Cookie",
+      "X-Auth-Token",
+      "X-Diagnostic-Token",
     ],
-    exposedHeaders: ["Set-Cookie"],
+    exposedHeaders: [
+      "Set-Cookie",
+      "Authorization",
+      "X-Auth-Token",
+      "X-Diagnostic-Token",
+    ],
+    maxAge: 86400,
   }),
 );
 
@@ -62,8 +91,9 @@ app.use((req, res, next) => {
     "http://localhost:5173",
     "http://localhost:5174",
     "http://localhost:3000",
-    "https://rusty-kart.onrender.com",
-    "https://rustynkart.onrender.com",
+
+    "https://rustynkart.vercel.app",
+    "https://rustynkart-admin.vercel.app",
   ];
   const origin = req.headers.origin;
 
@@ -71,9 +101,10 @@ app.use((req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", origin);
   }
 
-  // Security headers
+  // Security headers - set to be more permissive for cross-origin cookies
   res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
   res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
 
   // CORS headers
   res.setHeader("Access-Control-Allow-Credentials", "true");
@@ -83,9 +114,22 @@ app.use((req, res, next) => {
   );
   res.setHeader(
     "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, Authorization",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization, Cookie, X-Auth-Token, X-Diagnostic-Token",
   );
-  res.setHeader("Access-Control-Max-Age", "3600");
+  res.setHeader("Access-Control-Max-Age", "86400");
+  res.setHeader(
+    "Access-Control-Expose-Headers",
+    "Set-Cookie, Authorization, X-Auth-Token, X-Diagnostic-Token",
+  );
+
+  // Additional security headers
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+
+  // For debugging, log the Cookie header if present
+  if (req.headers.cookie) {
+    console.log("Cookie header received:", req.headers.cookie);
+  }
 
   // Handle preflight requests
   if (req.method === "OPTIONS") {
@@ -103,9 +147,9 @@ app.get("/test-cookie", (req, res) => {
   // Set a test cookie
   const testToken = "test-token-value";
   res.cookie("test-token", testToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    httpOnly: false,
+    secure: true,
+    sameSite: "none",
     maxAge: 24 * 60 * 60 * 1000, // 1 day
     path: "/",
   });
@@ -116,22 +160,127 @@ app.get("/test-cookie", (req, res) => {
   });
 });
 
+// Comprehensive auth diagnostic endpoint
+app.get("/api/auth/diagnostic", (req, res) => {
+  console.log("Auth diagnostic endpoint called");
+  console.log("Full request headers:", req.headers);
+  console.log("Cookies received:", req.cookies);
+  console.log("Origin:", req.headers.origin);
+  console.log("Referer:", req.headers.referer);
+
+  // Get auth token from various sources
+  const cookieToken = req.cookies?.token || "none";
+  const authHeader = req.headers.authorization || "none";
+  const xAuthToken = req.headers["x-auth-token"] || "none";
+
+  // Generate a test token and set in multiple ways
+  const diagnosticToken = "diagnostic-" + Date.now();
+
+  // Set as cookie
+  res.cookie("diagnostic-token", diagnosticToken, {
+    httpOnly: false,
+    secure: true,
+    sameSite: "none",
+    maxAge: 10 * 60 * 1000, // 10 minutes
+    path: "/",
+  });
+
+  // Set headers to help debug
+  res.setHeader("X-Diagnostic-Token", diagnosticToken);
+
+  return res.status(200).json({
+    status: "Diagnostics completed",
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || "development",
+    headers: {
+      origin: req.headers.origin,
+      referer: req.headers.referer,
+      userAgent: req.headers["user-agent"],
+    },
+    authStatus: {
+      cookieTokenExists: !!req.cookies?.token,
+      cookieTokenValue: cookieToken.substring(0, 10) + "...",
+      authHeaderExists: !!req.headers.authorization,
+      authHeaderValue: authHeader.substring(0, 10) + "...",
+      xAuthTokenExists: !!req.headers["x-auth-token"],
+      xAuthTokenValue: xAuthToken.substring(0, 10) + "...",
+    },
+    browserInfo: {
+      corsOrigin: req.headers.origin,
+      sameSiteStatus: "Check if cookie is visible in browser",
+      secureCookieStatus: req.secure ? "Secure context" : "Non-secure context",
+    },
+    diagnosticTokenSet: diagnosticToken,
+    nextSteps: [
+      "Check browser console for cookies (document.cookie)",
+      "Try using the diagnostic token in header for next request",
+      "Check DevTools > Application > Cookies to see if diagnostic-token is visible",
+      "If no cookies appear, check your browser's security settings",
+    ],
+  });
+});
+
 // Test route to verify auth
 app.get("/test-auth", (req, res) => {
   console.log("Test auth route called");
   console.log("Received cookies:", req.cookies);
+  console.log("Authorization header:", req.headers.authorization);
+  console.log("Cookie header:", req.headers.cookie);
 
-  if (req.cookies.token) {
+  // Check for token in cookies
+  const cookieToken = req.cookies && req.cookies.token;
+
+  // Check for token in Authorization header
+  let authToken = null;
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    authToken = authHeader.split(" ")[1];
+  }
+
+  if (cookieToken || authToken) {
     return res.status(200).json({
       authenticated: true,
-      token: "Token exists (not showing full value)",
+      tokenSource: cookieToken ? "cookie" : "header",
+      cookieExists: !!cookieToken,
+      authHeaderExists: !!authToken,
     });
   } else {
     return res.status(401).json({
       authenticated: false,
-      message: "No token found",
+      message: "No token found in cookies or Authorization header",
     });
   }
+});
+
+// Add a specific test endpoint for client-side cookie testing
+app.get("/api/auth/test-client-auth", (req, res) => {
+  console.log("Client auth test route called");
+  console.log("Headers:", req.headers);
+  console.log("Cookies:", req.cookies);
+
+  // Set a test cookie that should be visible to client-side JavaScript
+  res.cookie("client-test-cookie", "visible-to-js", {
+    httpOnly: false,
+    secure: true,
+    sameSite: "none",
+    maxAge: 10 * 60 * 1000, // 10 minutes
+    path: "/",
+  });
+
+  return res.status(200).json({
+    message: "Test cookie set",
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || "development",
+  });
+});
+
+// API health check endpoint
+app.get("/api/health", (req, res) => {
+  return res.status(200).json({
+    status: "ok",
+    environment: process.env.NODE_ENV || "development",
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // Routes
