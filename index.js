@@ -46,11 +46,20 @@ app.use(
         "http://localhost:5173",
         "http://localhost:5174",
         "http://localhost:3000",
+        "https://rusty-kart.onrender.com",
+        "https://rustynkart.onrender.com",
+        "https://rustynkart-frontend.vercel.app",
         "https://rustynkart.vercel.app",
         "https://rustynkart-admin.vercel.app",
       ];
 
-      if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      // Allow all vercel.app preview domains
+      if (!origin) {
+        callback(null, true);
+      } else if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else if (origin.includes("vercel.app")) {
+        console.log("Allowing Vercel preview domain:", origin);
         callback(null, true);
       } else {
         console.log("Blocked origin:", origin);
@@ -79,9 +88,19 @@ app.use(
   }),
 );
 
-// Log incoming requests for debugging
+// Log request details for debugging
 app.use((req, res, next) => {
   console.log(`Incoming Request: ${req.method} ${req.url}`);
+
+  if (req.method === "POST" || req.method === "PUT") {
+    console.log(`Request body: ${JSON.stringify(req.body || {})}`);
+  }
+
+  if (req.url.includes("/api/cart")) {
+    console.log("CART API CALLED:", req.method, req.url);
+    console.log("Headers for cart request:", JSON.stringify(req.headers));
+  }
+
   next();
 });
 
@@ -91,13 +110,19 @@ app.use((req, res, next) => {
     "http://localhost:5173",
     "http://localhost:5174",
     "http://localhost:3000",
-
+    "https://rusty-kart.onrender.com",
+    "https://rustynkart.onrender.com",
+    "https://rustynkart-frontend.vercel.app",
     "https://rustynkart.vercel.app",
     "https://rustynkart-admin.vercel.app",
   ];
   const origin = req.headers.origin;
 
-  if (allowedOrigins.includes(origin)) {
+  // Allow all vercel.app domains
+  if (
+    allowedOrigins.includes(origin) ||
+    (origin && origin.includes("vercel.app"))
+  ) {
     res.setHeader("Access-Control-Allow-Origin", origin);
   }
 

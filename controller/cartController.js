@@ -76,8 +76,12 @@ export const UpdateCart = async (req, res) => {
 
 export const getUserCart = async (req, res) => {
   try {
-    console.log("Request Body:", req.body); // Log request body
+    console.log("getUserCart called with method:", req.method);
     console.log("Request User ID:", req.userId); // Log user ID
+
+    if (req.method === "POST") {
+      console.log("Request Body:", req.body); // Log request body for POST
+    }
 
     const userData = await User.findById(req.userId);
 
